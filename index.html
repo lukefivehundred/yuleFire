@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>html,body{margin:0}</style>
+<title>yuleFire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    color-scheme: dark;
+    --ground:#0b0706;
+    --paper:#efe3cf;
+    --muted:#9a8876;
+    --ember:#ffb35c;
+    --line:rgba(239,227,207,.2);
+    --serif:"Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  html,body{height:100%;background:var(--ground);color:var(--paper);overflow:hidden}
+  body{font-family:var(--mono)}
+  #stage{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  #stage:active{cursor:grabbing}
+  .vignette{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 75% 70% at 50% 46%, rgba(0,0,0,0) 45%, rgba(8,4,2,.55) 80%, rgba(5,2,1,.85) 100%)}
+
+  /* controls panel: toggled with Cmd/Ctrl + I, or a double-tap */
+  .panel[hidden]{display:none}
+  .panel{position:fixed;inset:0;display:grid;place-items:center;padding:16px;pointer-events:none;z-index:5}
+  .card{pointer-events:auto;position:relative;width:min(440px,100%);max-height:calc(100% - 32px);overflow:auto;
+    background:rgba(20,11,7,.82);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    border:1px solid var(--line);border-radius:4px;padding:26px 28px 22px;box-shadow:0 30px 80px rgba(0,0,0,.55);
+    animation:rise .35s ease-out}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .card h1{font-family:var(--serif);font-weight:400;font-size:44px;line-height:1;margin:0;letter-spacing:-.01em}
+  .card h1 em{color:var(--ember)}
+  .card .sub{margin:8px 0 18px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .keys{list-style:none;margin:0;padding:0;font-size:12px}
+  .keys li{display:grid;grid-template-columns:78px 1fr auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid rgba(239,227,207,.09)}
+  .keys li:last-child{border-bottom:1px solid rgba(239,227,207,.09)}
+  .keys .k{display:flex;gap:4px}
+  kbd{font-family:var(--mono);font-size:11px;min-width:22px;text-align:center;padding:3px 6px;border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:3px;color:var(--paper);background:rgba(239,227,207,.05);white-space:nowrap}
+  .keys span{color:var(--paper)}
+  .keys button{font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--paper);background:transparent;
+    border:1px solid var(--line);padding:5px 10px;border-radius:2px;cursor:pointer;min-width:64px}
+  .keys button:hover{border-color:var(--ember);color:var(--ember)}
+  .keys button[aria-pressed="true"]{border-color:var(--ember);color:var(--ember)}
+  .keys input[type=range]{width:110px;accent-color:var(--ember)}
+  .card button:focus-visible,.card input:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+  .card footer{margin-top:18px;font-size:10.5px;line-height:1.7;letter-spacing:.04em;color:var(--muted)}
+  .card footer p{margin:0}
+  .close{position:absolute;top:12px;right:12px;width:30px;height:30px;border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;border-radius:2px}
+  .close:hover{color:var(--ember)}
+
+  .toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translate(-50%,6px);opacity:0;pointer-events:none;
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--paper);background:rgba(20,11,7,.7);border:1px solid var(--line);
+    padding:7px 14px;border-radius:2px;transition:opacity .35s, transform .35s}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .start-hint{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);font-size:11px;letter-spacing:.08em;
+    color:var(--muted);transition:opacity 1.5s;pointer-events:none;white-space:nowrap}
+  .start-hint.gone{opacity:0}
+  body.idle #stage{cursor:none}
+</style>
+
+</head>
+<body>
+<canvas id="stage" aria-label="A wood fire burning in a brick fireplace"></canvas>
+<div class="vignette"></div>
+<div id="panel" class="panel" role="dialog" aria-labelledby="pTitle" hidden>
+  <div class="card">
+    <button id="pClose" class="close" aria-label="Close">×</button>
+    <h1 id="pTitle">yule<em>Fire</em></h1>
+    <p class="sub">A generative wood fire · fluid-simulated flame</p>
+    <ul class="keys">
+      <li><div class="k"><kbd>A</kbd></div><span>Sound</span><button id="bSound" aria-pressed="false">Off</button></li>
+      <li><div class="k"><kbd>P</kbd></div><span>Hearth sprites</span><button id="bSprites" aria-pressed="true">On</button></li>
+      <li><div class="k"><kbd>S</kbd></div><span>Stoke the fire</span><button id="bStoke">Stoke</button></li>
+      <li><div class="k"><kbd>B</kbd></div><span>Breeze across the opening</span><button id="bBreeze">Breeze</button></li>
+      <li><div class="k"><kbd>↑</kbd><kbd>↓</kbd></div><span>Embers … Roaring</span><input id="fire" type="range" min="15" max="140" value="85" aria-label="Fire size"></li>
+      <li><div class="k"><kbd>Drag</kbd></div><span>Look around</span><span></span></li>
+      <li><div class="k"><kbd>Scroll</kbd></div><span>Lean in</span><span></span></li>
+      <li><div class="k"><kbd class="mod">⌘</kbd><kbd>I</kbd></div><span>Show or hide this panel</span><span></span></li>
+    </ul>
+    <footer>
+      <p>© 2026 D. Bill Kolomyjec. All rights reserved.</p>
+      <p>Made in collaboration with Claude, by Anthropic.</p>
+    </footer>
+  </div>
+</div>
+<div id="toast" class="toast" aria-live="polite"></div>
+<div id="startHint" class="start-hint">Press <kbd class="mod">⌘</kbd> <kbd>I</kbd> for controls</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canvas = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b0706);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.02, 50);
+
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // ---------- procedural textures ----------
+  function canvasTex(w, h, draw, repeatX = 1, repeatY = 1){
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    draw(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeatX, repeatY);
+    t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+    return t;
+  }
+  function bricks(g, w, h, {rows, cols, mortar, palette, soot}){
+    g.fillStyle = mortar; g.fillRect(0, 0, w, h);
+    const bh = h / rows, bw = w / cols, m = Math.max(2, bh * 0.12);
+    for (let r = 0; r < rows; r++){
+      const off = (r % 2) * bw / 2;
+      for (let c = -1; c <= cols; c++){
+        const x = c * bw + off, y = r * bh;
+        const base = palette[Math.floor(Math.random() * palette.length)];
+        g.fillStyle = base; g.fillRect(x + m/2, y + m/2, bw - m, bh - m);
+        for (let k = 0; k < 40; k++){ // speckle
+          g.fillStyle = `rgba(${Math.random()<.5?0:255},${Math.random()<.5?0:200},${Math.random()<.5?0:150},${Math.random()*0.06})`;
+          g.fillRect(x + m/2 + Math.random()*(bw-m), y + m/2 + Math.random()*(bh-m), 2 + Math.random()*4, 2 + Math.random()*3);
+        }
+      }
+    }
+    if (soot){
+      const gr = g.createLinearGradient(0, 0, 0, h);
+      gr.addColorStop(0, `rgba(8,5,4,${soot[0]})`); gr.addColorStop(0.55, `rgba(8,5,4,${soot[1]})`); gr.addColorStop(1, `rgba(8,5,4,${soot[2]})`);
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      const rg = g.createRadialGradient(w/2, h*0.35, 0, w/2, h*0.35, w*0.55);
+      rg.addColorStop(0, 'rgba(6,4,3,.55)'); rg.addColorStop(1, 'rgba(6,4,3,0)');
+      g.fillStyle = rg; g.fillRect(0, 0, w, h);
+    }
+  }
+  const fireBrick = (soot) => canvasTex(512, 512, (g, w, h) => bricks(g, w, h, {
+    rows: 18, cols: 5, mortar: '#5e544c', palette: ['#a8714f', '#9c6446', '#b27d58', '#8e5a3f', '#a36a4b'], soot }));
+  const faceBrickTex = () => canvasTex(512, 512, (g, w, h) => bricks(g, w, h, {
+    rows: 14, cols: 4, mortar: '#5a534c', palette: ['#6e2c1f', '#7a3322', '#5f2419', '#83402b', '#692a1d', '#4f1f16'] }));
+  const barkTex = canvasTex(256, 512, (g, w, h) => {
+    g.fillStyle = '#2a2019'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 70; i++){ // vertical furrows
+      const x = Math.random() * w;
+      g.strokeStyle = `rgba(${Math.random()<.5?8:70},${Math.random()<.5?6:55},4,${0.3 + Math.random()*0.5})`;
+      g.lineWidth = 1 + Math.random() * 5;
+      g.beginPath(); g.moveTo(x, 0);
+      for (let y = 0; y <= h; y += 16) g.lineTo(x + Math.sin(y * 0.03 + i) * 5, y);
+      g.stroke();
+    }
+    for (let i = 0; i < 90; i++){ // char patches
+      g.fillStyle = `rgba(10,8,7,${0.3 + Math.random()*0.5})`;
+      g.beginPath(); g.ellipse(Math.random()*w, Math.random()*h, 6 + Math.random()*26, 10 + Math.random()*40, 0, 0, Math.PI*2); g.fill();
+    }
+  });
+  const endGrainTex = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#b08a5e'; g.fillRect(0, 0, w, h);
+    for (let r = 4; r < 128; r += 3 + Math.random()*4){
+      g.strokeStyle = `rgba(90,60,35,${0.25 + Math.random()*0.35})`; g.lineWidth = 1 + Math.random()*1.5;
+      g.beginPath(); g.ellipse(128 + Math.random()*3, 128 + Math.random()*3, r, r*0.96, 0, 0, Math.PI*2); g.stroke();
+    }
+    g.strokeStyle = 'rgba(60,35,20,.6)'; g.lineWidth = 2;
+    for (let i = 0; i < 5; i++){ const a = Math.random()*Math.PI*2; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 + Math.cos(a)*120, 128 + Math.sin(a)*120); g.stroke(); }
+    const rg = g.createRadialGradient(128, 128, 90, 128, 128, 128);
+    rg.addColorStop(0, 'rgba(20,12,8,0)'); rg.addColorStop(0.7, 'rgba(20,12,8,.8)'); rg.addColorStop(1, 'rgba(15,10,8,1)');
+    g.fillStyle = rg; g.fillRect(0, 0, w, h);
+  });
+  const plankTex = canvasTex(512, 512, (g, w, h) => {
+    const pw = w / 4;
+    for (let i = 0; i < 4; i++){
+      g.fillStyle = ['#3b2519', '#442b1d', '#352116', '#402819'][i]; g.fillRect(i*pw, 0, pw, h);
+      for (let k = 0; k < 40; k++){
+        g.strokeStyle = `rgba(20,10,5,${Math.random()*0.25})`; g.lineWidth = 1 + Math.random()*2;
+        const x = i*pw + Math.random()*pw; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x+6, h*0.3, x-6, h*0.7, x+3, h); g.stroke();
+      }
+      g.fillStyle = 'rgba(10,5,3,.9)'; g.fillRect(i*pw, 0, 2, h);
+    }
+  }, 3, 3);
+  const plasterTex = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#3b2c24'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1400; i++){ g.fillStyle = `rgba(${Math.random()<.5?0:255},${Math.random()<.5?0:220},${Math.random()<.5?0:190},${Math.random()*0.04})`;
+      g.fillRect(Math.random()*w, Math.random()*h, 3 + Math.random()*8, 3 + Math.random()*8); }
+  }, 6, 3);
+
+  // ---------- shared GLSL ----------
+  const NOISE = `
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+    vec2 hash2(vec2 p){ p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
+    float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+      return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
+    float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<5;i++){ v+=a*noise(p); p=p*2.02+vec2(1.7,9.2); a*=0.5; } return v; }
+    // x: crack width (F2-F1), y: cell id hash
+    vec2 voronoi(vec2 x){ vec2 n=floor(x), f=fract(x); float F1=8.0, F2=8.0; vec2 id=vec2(0);
+      for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 g=vec2(float(i),float(j)); vec2 r=g+hash2(n+g)-f; float d=dot(r,r);
+        if(d<F1){ F2=F1; F1=d; id=n+g; } else if(d<F2){ F2=d; } }
+      return vec2(sqrt(F2)-sqrt(F1), hash(id)); }
+    vec3 emberRamp(float k){
+      vec3 c = mix(vec3(0.35,0.02,0.0), vec3(0.95,0.22,0.02), smoothstep(0.0,0.5,k));
+      c = mix(c, vec3(1.0,0.6,0.18), smoothstep(0.5,1.0,k));
+      return mix(c, vec3(1.0,0.88,0.6), smoothstep(1.0,1.6,k)); }`;
+
+  const G = { time:{value:0}, intensity:{value:0.85}, flick:{value:1} };
+
+  // ---------- architecture ----------
+  // Proportions from a standard 36"-class firebox: 38" front opening, 32" back wall, ~17" deep.
+  // opening: x ±OW, y OB..OT; back wall at z=BD (±BW wide); surround face at z=FACE
+  const IN = 0.0254;
+  const OW = 19*IN, OB = 0.06, OT = 0.84, BD = -17.5*IN, BW = 16*IN, FACE = 0.10;
+
+  scene.add(new THREE.AmbientLight(0x2a1810, 0.35));
+
+  // firebrick: one continuous wall strip (left side → back → right side) sharing a single
+  // brick layout, so courses run level and joints carry around both corners
+  { const pts = [[-OW, 0], [-BW, BD], [BW, BD], [OW, 0]];
+    const H = OT - OB + 0.05, NX = 10, NY = 14, S = 1.2;   // texture tile covers 1.2 m
+    const pos = [], uv = [], col = [], idx = [];
+    let u0 = 0;
+    for (let w = 0; w < 3; w++){
+      const [x0, z0] = pts[w], [x1, z1] = pts[w + 1];
+      const L = Math.hypot(x1 - x0, z1 - z0), base = pos.length / 3;
+      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++){
+        const t = i / NX, y = OB + H * j / NY, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+        pos.push(x, y, z); uv.push((u0 + L * t) / S, (y - OB) / S);
+        const hN = (y - OB) / H, cx = Math.abs(x) / OW;
+        const soot = Math.min(0.93, 0.18 + 0.78 * Math.pow(hN, 1.2) * (1 - 0.3 * cx) + 0.12 * Math.max(0, 0.15 - hN) / 0.15);
+        const c = 1 - soot; col.push(c, c * 0.97, c * 0.94);
+      }
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++){
+        const a = base + j * (NX + 1) + i, b = a + 1, c = a + NX + 1, d = c + 1;
+        idx.push(a, d, b, a, c, d);
+      }
+      u0 += L;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    const tex = fireBrick(null);
+    const walls = new THREE.Mesh(g, new THREE.MeshStandardMaterial({map:tex, vertexColors:true, roughness:.95, side:THREE.DoubleSide}));
+    walls.receiveShadow = true; scene.add(walls);
+  }
+  // smoke-chamber throat
+  const throat = new THREE.Mesh(new THREE.PlaneGeometry(OW*2, -BD + 0.02), new THREE.MeshBasicMaterial({color:0x050302}));
+  throat.rotation.x = Math.PI/2; throat.position.set(0, OT + 0.02, BD/2); scene.add(throat);
+
+  // ember + ash bed (firebox floor)
+  const bed = new THREE.Mesh(new THREE.PlaneGeometry(OW*2, -BD), new THREE.ShaderMaterial({
+    uniforms: G,
+    vertexShader:`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`uniform float time, intensity, flick; varying vec2 vUv;
+      ${NOISE}
+      void main(){
+        vec2 p = vec2(vUv.x*2.0, vUv.y) ;
+        vec2 v = voronoi(vUv * vec2(26.0, 13.0));
+        float pulse = 0.55 + 0.45*sin(time*(0.4 + v.y*1.3) + v.y*40.0);
+        vec2 c = (vUv - vec2(0.5, 0.5)) * vec2(1.0, 1.45);
+        float mask = 1.0 - smoothstep(0.08, 0.48, length(c));
+        float coal = smoothstep(0.03, 0.22, v.x) * (0.25 + 0.75*v.y);
+        float glow = coal * mask * pulse * (0.35 + 0.8*intensity) * flick;
+        float ash = fbm(vUv*vec2(40.0,20.0)) * 0.5 + 0.5;
+        vec3 ashCol = vec3(0.11, 0.095, 0.085) * ash * (0.6 + 0.4*flick);
+        ashCol *= mix(0.5, 1.0, smoothstep(0.0, 0.15, v.x));
+        vec3 col = ashCol + emberRamp(glow*1.4) * glow * 1.6;
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  }));
+  bed.rotation.x = -Math.PI/2; bed.position.set(0, OB, BD/2); scene.add(bed);
+
+  // brick surround (piers + lintel)
+  function faceBox(w, h, x, y){
+    const t = faceBrickTex(); t.repeat.set(w/1.0, h/1.0);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, FACE), new THREE.MeshStandardMaterial({map:t, roughness:.9}));
+    m.position.set(x, y, FACE/2); m.receiveShadow = true; m.castShadow = true; scene.add(m);
+  }
+  faceBox(0.95 - OW, 1.15, -(OW + 0.95)/2, 1.15/2);
+  faceBox(0.95 - OW, 1.15,  (OW + 0.95)/2, 1.15/2);
+  faceBox(OW*2, 1.15 - OT, 0, (1.15 + OT)/2);
+
+  // mantel shelf
+  const walnut = new THREE.MeshStandardMaterial({color:0x3a2416, roughness:.55});
+  const mantel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.075, 0.28), walnut);
+  mantel.position.set(0, 1.19, 0.12); mantel.castShadow = true; mantel.receiveShadow = true; scene.add(mantel);
+  const mould = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.04, 0.16), walnut);
+  mould.position.set(0, 1.135, 0.1); scene.add(mould);
+
+  // hearth slab
+  const slate = new THREE.MeshStandardMaterial({color:0x1c1917, roughness:.6, metalness:.05});
+  const hearth = new THREE.Mesh(new THREE.BoxGeometry(2.0, OB, 0.55), slate);
+  hearth.position.set(0, OB/2, FACE + 0.275 - 0.1); hearth.receiveShadow = true; scene.add(hearth);
+
+  // room: wall with an opening for the surround, and a plank floor
+  const wallShape = new THREE.Shape();
+  wallShape.moveTo(-5, 0); wallShape.lineTo(5, 0); wallShape.lineTo(5, 3.2); wallShape.lineTo(-5, 3.2); wallShape.lineTo(-5, 0);
+  const hole = new THREE.Path(); hole.moveTo(-0.95, 0); hole.lineTo(-0.95, 1.15); hole.lineTo(0.95, 1.15); hole.lineTo(0.95, 0); hole.lineTo(-0.95, 0);
+  wallShape.holes.push(hole);
+  const wallGeo = new THREE.ShapeGeometry(wallShape);
+  { const uv = wallGeo.attributes.uv, pos = wallGeo.attributes.position; for (let i=0;i<uv.count;i++) uv.setXY(i, pos.getX(i)/1.6, pos.getY(i)/1.6); }
+  const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({map:plasterTex, roughness:1}));
+  plasterTex.repeat.set(1, 1);
+  wall.position.z = 0.0; wall.receiveShadow = true; scene.add(wall);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), new THREE.MeshStandardMaterial({map:plankTex, roughness:.7}));
+  floor.rotation.x = -Math.PI/2; floor.position.set(0, 0.001, 3); floor.receiveShadow = true; scene.add(floor);
+
+  // ---------- log grate: six square-bar tines, upturned front and back, on two bent-leg rails ----------
+  const iron = new THREE.MeshStandardMaterial({color:0x1c1918, roughness:.55, metalness:.7});
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const addTube = (pts, r) => {
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, r, 4, false), iron);
+    m.castShadow = true; m.receiveShadow = true; scene.add(m);
+  };
+  const RUN_Y = 0.135, ZF = -0.06, ZB = -0.39;
+  for (let i = 0; i < 6; i++){
+    const x = -0.225 + i * 0.09;
+    addTube([V(x, 0.2, ZF + 0.055), V(x, 0.155, ZF + 0.02), V(x, RUN_Y, ZF - 0.01), V(x, RUN_Y, ZB + 0.05),
+             V(x, RUN_Y + 0.03, ZB + 0.01), V(x, RUN_Y + 0.17, ZB - 0.03)], 0.0085);
+  }
+  [ZF + 0.03, ZB + 0.08].forEach(z => {
+    addTube([V(-0.34, OB, z + 0.02), V(-0.315, OB + 0.04, z), V(-0.27, RUN_Y - 0.017, z), V(0.27, RUN_Y - 0.017, z),
+             V(0.315, OB + 0.04, z), V(0.34, OB, z + 0.02)], 0.0085);
+  });
+
+  // ---------- logs ----------
+  const logSide = new THREE.MeshStandardMaterial({map:barkTex, roughness:.95});
+  logSide.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, G);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vL; varying vec3 vW; varying vec3 vWN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvL = position; vW = (modelMatrix*vec4(transformed,1.0)).xyz; vWN = normalize(mat3(modelMatrix)*objectNormal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float time, intensity, flick;\nvarying vec3 vL; varying vec3 vW; varying vec3 vWN;\n${NOISE}`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float ang = atan(vL.z, vL.x);
+        vec2 v = voronoi(vec2(ang*4.2, vL.y*70.0));
+        float crack = 1.0 - smoothstep(0.0, 0.06, v.x);
+        float under = smoothstep(0.35, -0.6, vWN.y);
+        vec3 fc = vec3(0.0, 0.24, -0.21);
+        float near = exp(-dot(vW - fc, vW - fc) / 0.03);
+        float heat = clamp(under*1.0 + near*0.45, 0.0, 1.3) * (0.35 + 0.8*intensity);
+        float pulse = 0.5 + 0.5*sin(time*(0.35 + v.y*1.2) + v.y*50.0);
+        pulse *= 0.7 + 0.3*noise(vec2(vL.y*8.0, time*0.8));
+        float g = crack * heat * (0.35 + 0.9*pulse) + (1.0-crack) * heat * 0.12 * pulse * step(0.55, v.y);
+        g *= flick;
+        totalEmissiveRadiance += emberRamp(g*1.3) * g * 2.4;
+        diffuseColor.rgb *= mix(1.0, 0.35, clamp(heat, 0.0, 1.0));`);
+  };
+  const logEnd = new THREE.MeshStandardMaterial({map:endGrainTex, roughness:.9});
+
+  function makeLog(len, r, seed){
+    const g = new THREE.CylinderGeometry(r, r*0.95, len, 28, 18, false);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++){
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const a = Math.atan2(z, x);
+      const k = 1 + 0.07*Math.sin(3*a + seed) + 0.035*Math.sin(7*a + y*18 + seed*2) + 0.03*Math.sin(y*9 + seed*3);
+      p.setX(i, x*k); p.setZ(i, z*k);
+    }
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, [logSide, logEnd, logEnd]);
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+  function placeLog(len, r, pos, rotY, rotZ, seed){
+    const m = makeLog(len, r, seed);
+    const holder = new THREE.Group();
+    m.rotation.z = Math.PI/2;              // lie along x
+    holder.add(m);
+    holder.position.set(...pos); holder.rotation.set(0, rotY, rotZ);
+    scene.add(holder);
+    return holder;
+  }
+  placeLog(0.56, 0.072, [0.0, 0.215, -0.29], 0.06, 0.0, 1.3);   // back log
+  placeLog(0.50, 0.062, [0.02, 0.205, -0.12], -0.08, 0.02, 4.1); // front log
+  placeLog(0.46, 0.05, [-0.03, 0.315, -0.21], 0.42, -0.12, 7.7);  // top log, leaning across
+  placeLog(0.3, 0.035, [0.14, 0.285, -0.19], -0.9, 0.35, 2.2);   // split kindling
+
+  // spare logs stacked beside the hearth
+  [[0.0, 0.0], [0.13, 0.0], [0.065, 0.11]].forEach(([dx, dy], i) => {
+    const h = placeLog(0.42, 0.058, [1.15 + dx, 0.065 + 0.058 + dy, 0.35], Math.PI/2 + 0.04*i, 0, 10 + i);
+    h.children[0].material = [new THREE.MeshStandardMaterial({map:barkTex, roughness:.95, color:0x9a8a78}), logEnd, logEnd];
+  });
+
+  // coal chunks on the bed
+  const coalMats = [0, 1, 2, 3].map(i => new THREE.MeshStandardMaterial({color:0x0c0908, roughness:.95, emissive:0xff3a08, emissiveIntensity:0.4}));
+  const coals = [];
+  for (let i = 0; i < 46; i++){
+    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(0.01, 0.024), 0), coalMats[i % 4]);
+    const a = Math.random()*Math.PI*2, d = Math.sqrt(Math.random());
+    m.position.set(Math.cos(a)*d*0.26, OB + 0.006, -0.21 + Math.sin(a)*d*0.15);
+    m.rotation.set(rnd(0, 3), rnd(0, 3), rnd(0, 3)); m.scale.y = 0.6;
+    scene.add(m); coals.push(m);
+  }
+
+  // ---------- flames: GPU fluid simulations on several slices through the fire ----------
+  // Each slice runs its own 2D stable-fluids solver (advection, buoyancy, curl-noise stirring,
+  // vorticity confinement, pressure projection). Slices stand at different depths among the logs,
+  // and fade softly where they meet wood or brick, so the fire reads as a volume, not a sheet.
+  const simScene = new THREE.Scene();
+  const simCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+  quad.frustumCulled = false; simScene.add(quad);
+  const RT_OPTS = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+                    wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false, stencilBuffer: false };
+  const makeRT = (w, h) => new THREE.WebGLRenderTarget(w, h, RT_OPTS);
+  const pingpong = (w, h) => { let a = makeRT(w, h), b = makeRT(w, h);
+    return { get read(){ return a; }, get write(){ return b; }, swap(){ const t = a; a = b; b = t; } }; };
+  const run = (mat, target) => { quad.material = mat; renderer.setRenderTarget(target); renderer.render(simScene, simCam); };
+
+  const SIM_VS = `varying vec2 vUv, vL, vR, vT, vB; uniform vec2 texel;
+    void main(){ vUv = uv; vL = uv - vec2(texel.x, 0.0); vR = uv + vec2(texel.x, 0.0);
+      vT = uv + vec2(0.0, texel.y); vB = uv - vec2(0.0, texel.y); gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+  const HEAD = `precision highp float; varying vec2 vUv, vL, vR, vT, vB; uniform vec2 texel;`;
+
+  // shared across every slice
+  const S = { dt:{value:0.016}, time:{value:0}, fuel:{value:1}, buoy:{value:190}, turb:{value:520},
+              curlK:{value:16}, gust:{value:0}, kick:{value:0} };
+
+  // scene depth, for soft intersections between flame and solid geometry
+  const depthRT = new THREE.WebGLRenderTarget(4, 4);
+  depthRT.depthTexture = new THREE.DepthTexture();
+  depthRT.depthTexture.type = THREE.UnsignedIntType;
+  const DEPTH = { tDepth:{value:depthRT.depthTexture}, uRes:{value:new THREE.Vector2(1, 1)}, cNear:{value:camera.near}, cFar:{value:camera.far} };
+
+  function makeFire(o){
+    const SIM_W = o.res[0], SIM_H = o.res[1], DYE_W = SIM_W*2, DYE_H = SIM_H*2;
+    const texel = new THREE.Vector2(1/SIM_W, 1/SIM_H);
+    const vel = pingpong(SIM_W, SIM_H), dye = pingpong(DYE_W, DYE_H), prs = pingpong(SIM_W, SIM_H);
+    const curlRT = makeRT(SIM_W, SIM_H), divRT = makeRT(SIM_W, SIM_H);
+    const own = { seed:{value:o.seed}, cool:{value:o.cool}, strength:{value:o.strength},
+                  band:{value:new THREE.Vector4(...o.band)}, span:{value:new THREE.Vector4(...o.span)}, upper:{value:o.upper ? 1 : 0} };
+    const simMat = (uniforms, body) => new THREE.ShaderMaterial({
+      uniforms: Object.assign({ texel: { value: texel } }, uniforms),
+      vertexShader: SIM_VS, fragmentShader: HEAD + body, depthTest: false, depthWrite: false });
+
+    const curlPass = simMat({ uVel:{value:null} }, `uniform sampler2D uVel;
+      void main(){ float L = texture2D(uVel, vL).y, R = texture2D(uVel, vR).y, T = texture2D(uVel, vT).x, B = texture2D(uVel, vB).x;
+        gl_FragColor = vec4(0.5*(R - L - T + B), 0.0, 0.0, 1.0); }`);
+    const vortPass = simMat({ uVel:{value:null}, uCurl:{value:null}, dt:S.dt, curlK:S.curlK }, `uniform sampler2D uVel, uCurl; uniform float dt, curlK;
+      void main(){ float L = texture2D(uCurl, vL).x, R = texture2D(uCurl, vR).x, T = texture2D(uCurl, vT).x, B = texture2D(uCurl, vB).x, C = texture2D(uCurl, vUv).x;
+        vec2 f = 0.5*vec2(abs(T) - abs(B), abs(R) - abs(L)); f /= length(f) + 1e-4; f *= curlK * C; f.y *= -1.0;
+        vec2 v = texture2D(uVel, vUv).xy + f*dt; gl_FragColor = vec4(clamp(v, -900.0, 900.0), 0.0, 1.0); }`);
+    const forcePass = simMat({ uVel:{value:null}, uDye:{value:null}, dt:S.dt, time:S.time, buoy:S.buoy, turb:S.turb, gust:S.gust, kick:S.kick, seed:own.seed },
+      `uniform sampler2D uVel, uDye; uniform float dt, time, buoy, turb, gust, kick, seed;
+      ${NOISE}
+      void main(){
+        vec2 v = texture2D(uVel, vUv).xy;
+        float T = texture2D(uDye, vUv).r;
+        v.y += dt * buoy * T;                                    // hot gas rises
+        // restless air: curl of a drifting noise field stirs without any net up- or down-draft
+        vec2 q = vec2(vUv.x*5.0 + seed*3.1, vUv.y*4.0 - time*1.3), q2 = vec2(vUv.x*12.0 + 7.0 + seed, vUv.y*10.0 - time*2.9);
+        float e = 0.02;
+        float dpy = (noise(q + vec2(0.0, e)) - noise(q - vec2(0.0, e))) / (2.0*e) + 0.5*(noise(q2 + vec2(0.0, e)) - noise(q2 - vec2(0.0, e))) / (2.0*e);
+        float dpx = (noise(q + vec2(e, 0.0)) - noise(q - vec2(e, 0.0))) / (2.0*e) + 0.5*(noise(q2 + vec2(e, 0.0)) - noise(q2 - vec2(e, 0.0))) / (2.0*e);
+        v += dt * turb * 0.25 * vec2(dpy, -dpx) * (0.2 + 0.8*vUv.y);
+        v.x += dt * gust * 700.0 * smoothstep(0.05, 0.5, vUv.y);           // a breeze across the opening
+        v.y += dt * kick * 400.0 * (1.0 - smoothstep(0.0, 0.5, vUv.y));    // stoking: a rush of air from below
+        v *= exp(-dt * 0.9);
+        if (vUv.x < texel.x*1.5 || vUv.x > 1.0 - texel.x*1.5) v.x = 0.0;
+        v.y += dt * 60.0 * (1.0 - smoothstep(0.0, 0.25, vUv.y));           // air drawn up through the grate
+        gl_FragColor = vec4(v, 0.0, 1.0);
+      }`);
+    const divPass = simMat({ uVel:{value:null} }, `uniform sampler2D uVel;
+      void main(){ vec2 C = texture2D(uVel, vUv).xy;
+        float L = texture2D(uVel, vL).x, R = texture2D(uVel, vR).x, T = texture2D(uVel, vT).y, B = texture2D(uVel, vB).y;
+        if (vL.x < 0.0) L = -C.x; if (vR.x > 1.0) R = -C.x;
+        gl_FragColor = vec4(0.5*(R - L + T - B), 0.0, 0.0, 1.0); }`);
+    const fadePass = simMat({ uP:{value:null} }, `uniform sampler2D uP; void main(){ gl_FragColor = vec4(texture2D(uP, vUv).x*0.8, 0.0, 0.0, 1.0); }`);
+    const jacobiPass = simMat({ uP:{value:null}, uDiv:{value:null} }, `uniform sampler2D uP, uDiv;
+      void main(){ float L = texture2D(uP, vL).x, R = texture2D(uP, vR).x, T = texture2D(uP, vT).x, B = texture2D(uP, vB).x;
+        if (vT.y > 1.0) T = 0.0; if (vB.y < 0.0) B = 0.0;          // open to the chimney above and the grate below
+        gl_FragColor = vec4((L + R + B + T - texture2D(uDiv, vUv).x) * 0.25, 0.0, 0.0, 1.0); }`);
+    const gradPass = simMat({ uP:{value:null}, uVel:{value:null} }, `uniform sampler2D uP, uVel;
+      void main(){ float L = texture2D(uP, vL).x, R = texture2D(uP, vR).x, T = texture2D(uP, vT).x, B = texture2D(uP, vB).x;
+        if (vT.y > 1.0) T = 0.0; if (vB.y < 0.0) B = 0.0;
+        vec2 v = texture2D(uVel, vUv).xy - 0.5*vec2(R - L, T - B); gl_FragColor = vec4(v, 0.0, 1.0); }`);
+    const advectVelPass = simMat({ uVel:{value:null}, dt:S.dt }, `uniform sampler2D uVel; uniform float dt;
+      void main(){ vec2 c = vUv - dt * texture2D(uVel, vUv).xy * texel; gl_FragColor = vec4(texture2D(uVel, c).xy, 0.0, 1.0); }`);
+    // heat field: R = temperature, G = fresh combustion (the blue root of the flame)
+    const advectDyePass = simMat(Object.assign({ uVel:{value:null}, uDye:{value:null}, dt:S.dt, time:S.time, fuel:S.fuel }, own),
+      `uniform sampler2D uVel, uDye; uniform float dt, time, fuel, cool, seed, strength, upper; uniform vec4 band, span;
+      ${NOISE}
+      float source(vec2 p){
+        float sp = smoothstep(span.x, span.y, p.x) * (1.0 - smoothstep(span.z, span.w, p.x));
+        float bd = smoothstep(band.x, band.y, p.y) * (1.0 - smoothstep(band.z, band.w, p.y));
+        float up = upper * smoothstep(0.3, 0.36, p.x) * (1.0 - smoothstep(0.56, 0.64, p.x))
+                 * smoothstep(0.22, 0.25, p.y) * (1.0 - smoothstep(0.27, 0.3, p.y)) * 0.8;
+        float n = noise(vec2(p.x*22.0 + seed*13.0, time*2.4 + p.y*9.0));
+        float patches = smoothstep(0.3, 0.8, noise(vec2(p.x*6.0 + 3.0 + seed*7.0, time*0.3)));
+        return (bd*sp + up) * (0.35 + 0.65*n) * (0.65 + 0.6*patches) * strength;
+      }
+      void main(){
+        vec2 c = vUv - dt * texture2D(uVel, vUv).xy * texel;
+        vec4 d = texture2D(uDye, c);
+        float T = max(0.0, d.r * exp(-dt*cool*(0.55 + 2.6*vUv.y*vUv.y + 1.2*vUv.y)) - dt*0.05);
+        float B = d.g * exp(-dt*7.0);
+        float s = source(vUv) * fuel;
+        T = max(T, s * 1.35);
+        B = max(B, s);
+        gl_FragColor = vec4(min(T, 2.5), B, 0.0, 1.0);
+      }`);
+
+    function step(dt){
+      curlPass.uniforms.uVel.value = vel.read.texture; run(curlPass, curlRT);
+      vortPass.uniforms.uVel.value = vel.read.texture; vortPass.uniforms.uCurl.value = curlRT.texture; run(vortPass, vel.write); vel.swap();
+      forcePass.uniforms.uVel.value = vel.read.texture; forcePass.uniforms.uDye.value = dye.read.texture; run(forcePass, vel.write); vel.swap();
+      divPass.uniforms.uVel.value = vel.read.texture; run(divPass, divRT);
+      fadePass.uniforms.uP.value = prs.read.texture; run(fadePass, prs.write); prs.swap();
+      jacobiPass.uniforms.uDiv.value = divRT.texture;
+      for (let i = 0; i < 20; i++){ jacobiPass.uniforms.uP.value = prs.read.texture; run(jacobiPass, prs.write); prs.swap(); }
+      gradPass.uniforms.uP.value = prs.read.texture; gradPass.uniforms.uVel.value = vel.read.texture; run(gradPass, vel.write); vel.swap();
+      advectVelPass.uniforms.uVel.value = vel.read.texture; run(advectVelPass, vel.write); vel.swap();
+      advectDyePass.uniforms.uVel.value = vel.read.texture; advectDyePass.uniforms.uDye.value = dye.read.texture; run(advectDyePass, dye.write); dye.swap();
+      mat.uniforms.uDye.value = dye.read.texture;
+    }
+
+    const geo = new THREE.PlaneGeometry(o.size[0], o.size[1]); geo.translate(0, o.size[1]/2, 0);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: Object.assign({ uDye:{value:null}, bright:{value:o.bright}, soft:{value:o.soft} }, DEPTH),
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+      vertexShader:`varying vec2 vUv; varying float vViewZ;
+        void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vViewZ = -mv.z; gl_Position = projectionMatrix*mv; }`,
+      fragmentShader:`uniform sampler2D uDye, tDepth; uniform float bright, soft, cNear, cFar; uniform vec2 uRes;
+        varying vec2 vUv; varying float vViewZ;
+        vec3 heatColor(float t){   // glowing soot, from dull red to near-white
+          vec3 c = mix(vec3(0.0), vec3(0.42,0.03,0.0), smoothstep(0.06,0.25,t));
+          c = mix(c, vec3(1.0,0.26,0.02), smoothstep(0.2,0.5,t));
+          c = mix(c, vec3(1.0,0.6,0.14), smoothstep(0.45,0.85,t));
+          c = mix(c, vec3(1.0,0.88,0.6), smoothstep(0.85,1.5,t));
+          return c; }
+        void main(){
+          vec4 d = texture2D(uDye, vUv);
+          float T = d.r;
+          vec3 col = heatColor(T) * smoothstep(0.18, 0.45, T) * (0.6 + 0.8*smoothstep(0.3, 1.1, T));
+          col += vec3(0.1, 0.22, 1.0) * d.g * d.g * (1.0 - smoothstep(0.25, 0.7, T)) * 0.35;   // blue at the root
+          float edge = smoothstep(0.0, 0.07, vUv.x) * smoothstep(0.0, 0.07, 1.0 - vUv.x) * smoothstep(0.0, 0.02, vUv.y);
+          // soft intersection: fade out as the flame approaches whatever solid surface lies behind it
+          float zb = texture2D(tDepth, gl_FragCoord.xy / uRes).x * 2.0 - 1.0;
+          float sceneZ = 2.0 * cNear * cFar / (cFar + cNear - zb * (cFar - cNear));
+          float fade = smoothstep(0.0, soft, sceneZ - vViewZ);
+          gl_FragColor = vec4(col * edge * bright * fade, 1.0);
+        }`
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(...o.pos); mesh.renderOrder = 5; mesh.layers.set(1);
+    scene.add(mesh);
+    return { mesh, step };
+  }
+
+  // slice coordinates: x 0..1 across the slice, y 0..1 up from its base
+  const fires = [
+    // behind the back log: flames rising off its top against the back wall
+    makeFire({ pos:[0.0, 0.13, -0.33], size:[0.8, 0.8], res:[96, 112], seed:2.3, cool:2.6, strength:0.95, bright:0.85, soft:0.05,
+               band:[0.12, 0.16, 0.22, 0.27], span:[0.14, 0.24, 0.78, 0.88], upper:false }),
+    // the main body of the fire, rising through the gap between the logs
+    makeFire({ pos:[0.02, 0.13, -0.2], size:[0.84, 0.8], res:[128, 144], seed:0.0, cool:2.9, strength:1.0, bright:1.0, soft:0.04,
+               band:[0.02, 0.06, 0.17, 0.23], span:[0.14, 0.24, 0.78, 0.88], upper:true }),
+    // licking up the face of the front log from underneath
+    makeFire({ pos:[0.02, 0.112, -0.028], size:[0.64, 0.42], res:[80, 64], seed:5.7, cool:9.0, strength:0.62, bright:0.6, soft:0.02,
+               band:[0.0, 0.03, 0.08, 0.14], span:[0.16, 0.26, 0.74, 0.84], upper:false }),
+  ];
+  function stepFires(dt){ S.dt.value = dt; fires.forEach(f => f.step(dt)); renderer.setRenderTarget(null); }
+
+  // soft light bloom over the fire
+  const glowTex = canvasTex(128, 128, (g) => {
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,150,60,.55)'); gr.addColorStop(0.35, 'rgba(255,100,30,.16)'); gr.addColorStop(1, 'rgba(255,80,20,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  });
+  glowTex.encoding = THREE.LinearEncoding;
+  const bloom = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, transparent:true}));
+  bloom.position.set(0, 0.38, -0.1); bloom.scale.set(1.3, 1.1, 1); bloom.renderOrder = 9; bloom.layers.set(1);
+  scene.add(bloom);
+
+  // ---------- fire light ----------
+  const fireLights = [
+    { l:new THREE.PointLight(0xff8a3a, 0.8, 6, 2), p:[0, 0.46, -0.12], seed:0.0, base:0.3 },
+    { l:new THREE.PointLight(0xff7028, 0.35, 5, 2), p:[-0.18, 0.3, -0.21], seed:7.0, base:0.12 },
+    { l:new THREE.PointLight(0xff7028, 0.35, 5, 2), p:[0.18, 0.3, -0.21], seed:13.0, base:0.12 },
+    { l:new THREE.PointLight(0xff8c40, 0.3, 7, 2), p:[0, 0.62, 0.16], seed:21.0, base:0.22 },
+    { l:new THREE.PointLight(0xff9a55, 0.5, 9, 2), p:[0, 0.7, 1.3], seed:29.0, base:0.5 },   // warm bounce from the room
+  ];
+  fireLights.forEach((f, i) => { f.l.position.set(...f.p); scene.add(f.l); });
+  const key = fireLights[0].l;
+  key.castShadow = true; key.shadow.mapSize.set(512, 512); key.shadow.bias = -0.003; key.shadow.radius = 5;
+  key.shadow.camera.near = 0.02;
+  const spill = fireLights[3].l;
+  spill.castShadow = true; spill.shadow.mapSize.set(512, 512); spill.shadow.bias = -0.003; spill.shadow.radius = 6; spill.shadow.camera.near = 0.05;
+
+  // ---------- sparks ----------
+  const SP = 260;
+  const spPos = new Float32Array(SP*3), spLife = new Float32Array(SP), spSize = new Float32Array(SP);
+  const spVel = [], spDur = new Float32Array(SP), spAge = new Float32Array(SP), spSeed = new Float32Array(SP);
+  for (let i = 0; i < SP; i++){ spVel.push(new THREE.Vector3()); spLife[i] = 1; spAge[i] = 1e9; spPos[i*3+1] = -10; }
+  const spGeo = new THREE.BufferGeometry();
+  spGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+  spGeo.setAttribute('life', new THREE.BufferAttribute(spLife, 1));
+  spGeo.setAttribute('size', new THREE.BufferAttribute(spSize, 1));
+  const spU = { uPR:{value:renderer.getPixelRatio()} };
+  const sparks = new THREE.Points(spGeo, new THREE.ShaderMaterial({
+    uniforms: spU, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    vertexShader:`attribute float life; attribute float size; uniform float uPR; varying float vLife;
+      void main(){ vLife = life; vec4 mv = modelViewMatrix*vec4(position,1.0);
+        gl_PointSize = size * uPR * (1.0 / -mv.z) * (1.0 - life*0.5); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader:`varying float vLife;
+      void main(){ vec2 p = gl_PointCoord*2.0-1.0; float d = dot(p,p); if (d > 1.0 || vLife >= 1.0) discard;
+        float a = exp(-d*3.0) * pow(1.0 - vLife, 1.3);
+        vec3 c = mix(vec3(1.0,0.85,0.45), vec3(1.0,0.28,0.03), smoothstep(0.0,0.7,vLife));
+        gl_FragColor = vec4(c*a*2.0, a); }`
+  }));
+  sparks.renderOrder = 6; sparks.layers.set(1); scene.add(sparks);
+  let spNext = 0;
+  function emitSpark(boost = 1, at = null, fall = false){
+    const i = spNext; spNext = (spNext + 1) % SP;
+    if (at){ spPos[i*3] = at.x + rnd(-0.02, 0.02); spPos[i*3+1] = at.y + 0.01; spPos[i*3+2] = at.z + rnd(-0.02, 0.02); }
+    else { spPos[i*3] = rnd(-0.2, 0.2); spPos[i*3+1] = rnd(0.22, 0.34); spPos[i*3+2] = rnd(-0.32, -0.1); }
+    spVel[i].set(rnd(-0.08, 0.08), rnd(0.35, 0.8) * boost, rnd(-0.03, 0.06));
+    if (fall) spVel[i].set(rnd(-0.06, 0.06), -rnd(0.15, 0.5), rnd(-0.02, 0.04));
+    spDur[i] = at ? rnd(0.3, 0.7) : rnd(0.7, 2.0); spAge[i] = 0; spSeed[i] = rnd(0, 100);
+    spSize[i] = at ? rnd(5, 9) : rnd(7, 16);
+  }
+  function burst(n){ for (let k = 0; k < n; k++) emitSpark(rnd(1.1, 1.7)); }
+
+  // ---------- hearth sprites: little flames that leave the fire to dance ----------
+  // Each sprite is its own small flame with ember eyes. Now and then a pair emerges from the fire,
+  // bounds out over the front log onto the hearth, dances around each other with springy,
+  // floaty hops and twirls, cools as it goes, then leaps back into the flames.
+  const SPR_W = 0.12, SPR_H = 0.16, HEARTH_Y = OB;
+  const sprGeo = new THREE.PlaneGeometry(SPR_W, SPR_H); sprGeo.translate(0, SPR_H/2, 0);   // pivot at its feet
+  const sprVS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`;
+  const sprFS = `uniform float time, seed, spin, lean, blink, heat, alpha, joy; varying vec2 vUv;
+    ${NOISE}
+    void main(){
+      float y = vUv.y, xr = (vUv.x - 0.5) * 2.0;
+      float face = cos(spin);
+      // body: a plump, restless flame
+      float x = xr - lean * y * y;
+      x += (fbm(vec2(y*3.0 - time*4.5, seed)) - 0.5) * 0.4 * y * y;
+      float w = 2.0 * pow(max(y, 0.0), 0.42) * pow(max(1.0 - y, 0.0), 0.8) * (0.72 + 0.28*abs(face));
+      float d = abs(x) / max(w, 1e-3);
+      float body = 1.0 - smoothstep(0.25, 1.15, d);            // soft, glowing edge rather than an outline
+      body *= 1.0 - smoothstep(0.7, 1.0, y) * 0.6;
+      if (body <= 0.004 || alpha <= 0.0) discard;
+      float core = 1.0 - smoothstep(0.0, 0.9, d);
+      vec3 col = mix(vec3(1.0,0.34,0.04), vec3(1.0,0.74,0.3), smoothstep(0.1, 0.8, core));
+      col = mix(col, vec3(1.0,0.95,0.8), smoothstep(0.6,1.0,core) * smoothstep(0.12,0.45,y) * (1.0 - smoothstep(0.55,0.8,y)));
+      col = mix(col, vec3(0.25,0.4,1.0), (1.0 - smoothstep(0.0, 0.13, y)) * 0.55);
+      col *= 0.45 + 0.85*heat;
+      // face: two tall ember eyes that slide round as it twirls, a small smile when happy
+      float ex = sin(spin) * 0.42 - lean*0.12;
+      float facing = smoothstep(0.05, 0.35, face);
+      float bl = mix(1.0, 0.12, blink);
+      vec2 p1 = (vec2(xr, y) - vec2(-0.26 + ex, 0.39)) / vec2(0.12, 0.075*bl);
+      vec2 p2 = (vec2(xr, y) - vec2( 0.26 + ex, 0.39)) / vec2(0.12, 0.075*bl);
+      float eyes = max(1.0 - smoothstep(0.35, 1.15, length(p1)), 1.0 - smoothstep(0.35, 1.15, length(p2))) * facing;
+      float hl = max(1.0 - smoothstep(0.0, 0.45, length(p1 - vec2(0.3, 0.3))), 1.0 - smoothstep(0.0, 0.45, length(p2 - vec2(0.3, 0.3))));
+      col = mix(col, vec3(0.3,0.07,0.0), eyes * 0.75);          // soft, smouldering eyes
+      col += vec3(1.0,0.8,0.5) * hl * eyes * step(0.3, bl) * 0.25;
+      gl_FragColor = vec4(col, body * alpha * (0.55 + 0.45*core));
+    }`;
+  const sprGlowTex = canvasTex(64, 64, (g) => {
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,160,70,.7)'); gr.addColorStop(0.4, 'rgba(255,110,30,.2)'); gr.addColorStop(1, 'rgba(255,80,20,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  });
+  sprGlowTex.encoding = THREE.LinearEncoding;
+
+  const easeHang = (u) => { const v = 2*u - 1; return (Math.sign(v) * Math.pow(Math.abs(v), 1.7) + 1) / 2; };  // quick off the ground, floaty at the top
+  function makeSprite(seed){
+    const U = { time:G.time, seed:{value:seed}, spin:{value:0}, lean:{value:0}, blink:{value:0}, heat:{value:1}, alpha:{value:0}, joy:{value:1} };
+    const mesh = new THREE.Mesh(sprGeo, new THREE.ShaderMaterial({ uniforms:U, vertexShader:sprVS, fragmentShader:sprFS,
+      transparent:true, depthWrite:false, side:THREE.DoubleSide }));
+    mesh.renderOrder = 7; mesh.layers.set(1); mesh.visible = false; scene.add(mesh);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map:sprGlowTex, blending:THREE.AdditiveBlending, depthWrite:false, transparent:true }));
+    glow.scale.set(0.34, 0.34, 1); glow.layers.set(1); glow.visible = false; scene.add(glow);
+    const light = new THREE.PointLight(0xff8a3a, 0, 1.4, 2); scene.add(light);
+    return { U, mesh, glow, light, seed, pos:new THREE.Vector3(0, -1, 0), hops:[], hi:0, ht:0, squash:0, spin:0, nextBlink:rnd(1, 4), blinkT:0 };
+  }
+  const sprites = [makeSprite(1.7), makeSprite(8.3)];
+
+  // choreography: a list of hops {from, to, dur, h, twirl, kind}
+  function choreograph(){
+    const C = new THREE.Vector3(rnd(-0.3, 0.3), HEARTH_Y, rnd(0.24, 0.34));
+    const R = 0.085;
+    sprites.forEach((sp, k) => {
+      const hops = [];
+      const startX = C.x + (k ? 0.08 : -0.08);
+      const inFire = new THREE.Vector3(startX * 0.6, 0.26, -0.19);
+      let cur = inFire.clone();
+      const add = (to, dur, h, twirl = 0, kind = 'hop') => { hops.push({ from:cur.clone(), to:to.clone(), dur, h, twirl, kind }); cur = to.clone(); };
+      hops.push({ from:inFire.clone(), to:inFire.clone(), dur:0.7 + k*0.25, h:0, twirl:0, kind:'emerge' });
+      // the big leap out over the front log
+      add(new THREE.Vector3(C.x + (k ? R : -R), HEARTH_Y, C.z), 1.0, 0.24, 0, 'leap');
+      // circle each other, a twirl on every third hop
+      let a = k ? 0 : Math.PI;
+      for (let i = 0; i < 8; i++){
+        a += Math.PI / 3;
+        const tw = (i % 3 === 2) ? (k ? -1 : 1) : 0;
+        add(new THREE.Vector3(C.x + Math.cos(a)*R, HEARTH_Y, C.z + Math.sin(a)*R*0.7), tw ? 0.75 : 0.5, tw ? 0.14 : 0.075, tw);
+      }
+      // a run of long, springy bounds side by side across the hearth and back
+      const dir = C.x > 0 ? -1 : 1;
+      for (let i = 1; i <= 3; i++) add(new THREE.Vector3(C.x + dir*0.13*i + (k ? 0.05 : -0.05), HEARTH_Y, C.z + (k ? 0.04 : -0.04)), 0.62, 0.11);
+      add(new THREE.Vector3(cur.x, HEARTH_Y, cur.z), 0.9, 0.2, k ? -2 : 2);   // a double twirl on the spot
+      for (let i = 2; i >= 0; i--) add(new THREE.Vector3(C.x + dir*0.13*i + (k ? 0.05 : -0.05), HEARTH_Y, C.z + (k ? 0.04 : -0.04)), 0.62, 0.11);
+      // back to the fire
+      add(new THREE.Vector3(startX, HEARTH_Y, 0.12), 0.55, 0.08);
+      add(new THREE.Vector3(startX * 0.6, 0.27, -0.2), 1.0, 0.26, 0, 'leapIn');
+      sp.hops = hops; sp.hi = 0; sp.ht = 0; sp.spin = 0; sp.pos.copy(inFire);
+      sp.mesh.visible = sp.glow.visible = true;
+    });
+    spritesOut = true;
+  }
+  let spritesOut = false, nextShow = 14;
+
+  function landing(sp){
+    sp.squash = 1;
+    for (let k = 0; k < 3; k++){ emitSpark(0.5, sp.pos); }
+    if (soundOn && audio){ const t0 = audio.ctx.currentTime + 0.005; tick(t0, rnd(0.03, 0.07), 2500); }
+  }
+  const tmpV = new THREE.Vector3();
+  function updateSprites(dt){
+    if (!spritesOut){
+      if (spritesEnabled && time > nextShow) choreograph();
+      else return;
+    }
+    let active = 0;
+    sprites.forEach(sp => {
+      const hop = sp.hops[sp.hi];
+      if (!hop){ sp.mesh.visible = sp.glow.visible = false; sp.light.intensity = 0; return; }
+      active++;
+      sp.ht += dt;
+      const u = Math.min(1, sp.ht / hop.dur);
+      let alpha = 1, heatTarget;
+      if (hop.kind === 'emerge'){
+        alpha = u; sp.pos.copy(hop.from).add(tmpV.set(0, u*0.04, 0));
+      } else {
+        const e = easeHang(u);
+        sp.pos.lerpVectors(hop.from, hop.to, e);
+        sp.pos.y += hop.h * 4 * e * (1 - e);
+        if (hop.kind === 'leapIn') alpha = 1 - smoothstep01(0.55, 1, u);
+      }
+      const prevSpin = sp.spin;
+      if (hop.twirl) sp.spin = hop.twirl * Math.PI * 2 * easeHang(u);
+      // squash on landing, stretch at take-off
+      sp.squash = Math.max(0, sp.squash - dt * 6);
+      const air = hop.kind === 'emerge' ? 0 : Math.sin(Math.PI * u);
+      const sy = 1 - 0.3*sp.squash + 0.16*air*(1 - u) , sx = 1 + 0.28*sp.squash - 0.1*air*(1 - u);
+      const grow = hop.kind === 'emerge' ? 0.4 + 0.6*u : 1;
+      sp.mesh.scale.set(sx*grow, sy*grow, 1);
+      sp.mesh.position.copy(sp.pos);
+      sp.mesh.quaternion.copy(camera.quaternion);
+      const vx = (hop.to.x - hop.from.x) / hop.dur;
+      sp.U.lean.value += ((-vx * 1.6) - sp.U.lean.value) * Math.min(1, dt * 8);
+      sp.U.spin.value = sp.spin;
+      // they cool while away from the fire, and warm again going home
+      const onHearth = sp.pos.z > 0.05;
+      heatTarget = onHearth ? 0.55 : 1.0;
+      sp.U.heat.value += (heatTarget - sp.U.heat.value) * Math.min(1, dt * 0.25);
+      sp.U.alpha.value = alpha;
+      // blinking
+      sp.nextBlink -= dt;
+      if (sp.nextBlink < 0){ sp.blinkT = 0.14; sp.nextBlink = rnd(1.5, 4.5); }
+      sp.blinkT = Math.max(0, sp.blinkT - dt); sp.U.blink.value = sp.blinkT > 0 ? 1 : 0;
+      sp.glow.position.copy(sp.pos).add(tmpV.set(0, SPR_H*0.4, 0));
+      sp.glow.material.opacity = 0.7 * alpha * sp.U.heat.value;
+      sp.light.position.copy(sp.pos).add(tmpV.set(0, 0.06, 0));
+      sp.light.intensity = 0.12 * alpha * sp.U.heat.value * (0.85 + 0.15*Math.sin(time*23 + sp.seed));
+      if (u >= 1){
+        if (hop.kind !== 'emerge' && hop.kind !== 'leapIn') landing(sp);
+        if (hop.kind === 'leapIn'){ burst(6); pop(); }
+        sp.hi++; sp.ht = 0;
+      }
+    });
+    if (!active){ spritesOut = false; nextShow = time + rnd(35, 60); }
+  }
+  const smoothstep01 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t*t*(3 - 2*t); };
+
+  // ---------- falling embers: the product of burning ----------
+  // Now and then a glowing piece breaks from a log, falls through the grate (sometimes glancing off
+  // a bar), settles on the bed, and slowly fades from orange to grey ash. The pile builds over time.
+  const EMB_MAX = 80, embGeo = new THREE.DodecahedronGeometry(1, 0);
+  const embers = [];
+  let embNext = 0, embAcc = 0, fsAcc = 0;
+  const dropSites = [
+    [0.36, () => [rnd(-0.2, 0.24), 0.132, rnd(-0.16, -0.08)], () => [rnd(-0.04, 0.04), 0, rnd(0.0, 0.05)]],        // under the front log
+    [0.3,  () => [rnd(-0.22, 0.22), 0.132, rnd(-0.34, -0.25)], () => [rnd(-0.04, 0.04), 0, rnd(-0.02, 0.03)]],      // under the back log
+    [0.17, () => [-0.25, rnd(0.17, 0.25), rnd(-0.33, -0.1)], () => [rnd(-0.22, -0.08), rnd(0, 0.1), rnd(-0.03, 0.03)]], // off the left ends
+    [0.17, () => [0.28, rnd(0.17, 0.25), rnd(-0.33, -0.1)], () => [rnd(0.08, 0.22), rnd(0, 0.1), rnd(-0.03, 0.03)]],    // off the right ends
+  ];
+  function pickSite(){ let r = Math.random(); for (const s of dropSites){ if ((r -= s[0]) <= 0) return s; } return dropSites[0]; }
+  function dropEmber(){
+    let e = embers[embNext];
+    if (!e){
+      const mat = new THREE.MeshStandardMaterial({color:0x0c0908, roughness:.95, emissive:0xff5212, emissiveIntensity:0});
+      e = { mesh:new THREE.Mesh(embGeo, mat), vel:new THREE.Vector3(), spin:new THREE.Vector3() };
+      scene.add(e.mesh); embers[embNext] = e;
+    }
+    embNext = (embNext + 1) % EMB_MAX;
+    const site = pickSite();
+    const big = Math.random() < 0.3, size = big ? rnd(0.011, 0.019) : rnd(0.005, 0.01);
+    e.mesh.scale.set(size, size * rnd(0.55, 0.85), size * rnd(0.8, 1.15));
+    e.mesh.position.set(...site[1]()); e.vel.set(...site[2]());
+    e.mesh.rotation.set(rnd(0, 6), rnd(0, 6), rnd(0, 6));
+    e.spin.set(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8));
+    e.state = 'falling'; e.age = 0; e.bounces = 0; e.hitGrate = false; e.seed = rnd(0, 50);
+    e.life = big ? rnd(100, 180) : rnd(30, 70);
+    e.mesh.visible = true;
+    for (let k = 0; k < 2; k++) emitSpark(0.6, e.mesh.position, true);
+  }
+  function updateEmbers(dt, I){
+    embAcc += dt * (0.14 + 0.3*I + 2.5*stoke);
+    while (embAcc > 1){ embAcc -= 1; dropEmber(); }
+    fsAcc += dt * (0.6 + 1.2*I);                       // lone sparks dropping from the logs
+    while (fsAcc > 1){ fsAcc -= 1; emitSpark(0.6, tmpV.set(rnd(-0.22, 0.25), 0.14, rnd(-0.32, -0.08)), true); }
+    for (const e of embers){
+      if (!e) continue;
+      const m = e.mesh, p = m.position;
+      e.age += dt;
+      if (e.state === 'falling'){
+        e.vel.y -= 9.8 * dt;
+        p.addScaledVector(e.vel, dt);
+        m.rotation.x += e.spin.x*dt; m.rotation.y += e.spin.y*dt; m.rotation.z += e.spin.z*dt;
+        if (!e.hitGrate && p.y < 0.138 && p.y > 0.118 && p.z < -0.05 && p.z > -0.4 && Math.random() < 0.3){
+          e.hitGrate = true; e.vel.y = Math.abs(e.vel.y) * 0.3; e.vel.x += rnd(-0.12, 0.12);
+          if (soundOn && audio) tick(audio.ctx.currentTime + 0.01, rnd(0.02, 0.05), 3000);
+        }
+        p.x = Math.max(-0.42, Math.min(0.42, p.x)); p.z = Math.max(BD + 0.03, Math.min(0.04, p.z));
+        const floor = OB + m.scale.y * 0.7;
+        if (p.y <= floor){
+          p.y = floor;
+          if (e.bounces < 1 && e.vel.y < -0.5){ e.vel.y *= -0.22; e.vel.x *= 0.5; e.vel.z *= 0.5; e.spin.multiplyScalar(0.4); e.bounces++; }
+          else { e.state = 'rest'; e.age = 0; }
+          if (m.scale.x > 0.009) for (let k = 0; k < 3; k++) emitSpark(0.4, p);
+          if (soundOn && audio) tick(audio.ctx.currentTime + 0.01, rnd(0.015, 0.04), 1800);
+        }
+      }
+      // glow fades as it burns out, leaving grey ash
+      const heat = e.state === 'falling' ? 1 : Math.max(0, 1 - e.age / e.life);
+      const fl = 0.8 + 0.2*Math.sin(time*(1.5 + e.seed*0.05) + e.seed);
+      m.material.emissiveIntensity = heat * heat * (1.4 + 1.6*heat) * fl * (0.6 + 0.5*I);
+      const ash = 1 - heat;
+      m.material.color.setRGB(0.05 + 0.2*ash, 0.04 + 0.19*ash, 0.035 + 0.17*ash);
+    }
+  }
+
+  // ---------- sound: synthesised wood-fire ----------
+  // A real fire is mostly quiet: a faint low breath, sparse clusters of tiny ticks as wood fibres
+  // split, an occasional resonant pop from a pocket of sap, and now and then a soft hiss of steam.
+  let audio = null, soundOn = false;
+  function initAudio(){
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const sr = ctx.sampleRate;
+    const master = ctx.createGain(); master.gain.value = 0;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.002; comp.release.value = 0.15;
+    master.connect(comp).connect(ctx.destination);
+    // a small warm room, so ticks sound like they happen in a fireplace, not in your ear
+    const ir = ctx.createBuffer(2, Math.floor(sr * 0.7), sr);
+    for (let c = 0; c < 2; c++){ const d = ir.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/d.length, 3) * 0.5; }
+    const room = ctx.createConvolver(); room.buffer = ir;
+    const roomLP = ctx.createBiquadFilter(); roomLP.type = 'lowpass'; roomLP.frequency.value = 3200;
+    const wet = ctx.createGain(); wet.gain.value = 0.22;
+    const bus = ctx.createGain();                       // everything goes through here
+    bus.connect(master); bus.connect(room); room.connect(roomLP).connect(wet).connect(master);
+    // the faint low breath of the fire drawing air
+    const len = sr * 4, bb = ctx.createBuffer(1, len, sr), bd = bb.getChannelData(0);
+    let last = 0; for (let i = 0; i < len; i++){ last = (last + 0.02*(Math.random()*2 - 1)) / 1.02; bd[i] = last * 3.5; }
+    const bed = ctx.createBufferSource(); bed.buffer = bb; bed.loop = true;
+    const bedLP = ctx.createBiquadFilter(); bedLP.type = 'lowpass'; bedLP.frequency.value = 160; bedLP.Q.value = 0.4;
+    const bedGain = ctx.createGain(); bedGain.gain.value = 0.05;
+    bed.connect(bedLP).connect(bedGain).connect(master); bed.start();
+    // a bank of tiny click shapes (1–6 ms), each slightly different
+    const clicks = [];
+    for (let k = 0; k < 28; k++){
+      const n = Math.floor(sr * rnd(0.001, 0.006)), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0);
+      const tau = rnd(0.00015, 0.0012) * sr, second = Math.random() < 0.4 ? Math.floor(rnd(0.2, 0.6) * n) : -1;
+      for (let i = 0; i < n; i++){
+        let e = Math.exp(-i / tau);
+        if (second > 0 && i >= second) e += 0.5 * Math.exp(-(i - second) / tau);
+        d[i] = (Math.random()*2 - 1) * e;
+      }
+      clicks.push(b);
+    }
+    const nb = ctx.createBuffer(1, sr * 2, sr), nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random()*2 - 1;
+    audio = { ctx, master, bus, bedGain, bedLP, clicks, noise:nb };
+  }
+  function tick(when, amp, hp = rnd(900, 3200)){
+    const { ctx, bus, clicks } = audio;
+    const s = ctx.createBufferSource(); s.buffer = clicks[Math.floor(Math.random() * clicks.length)];
+    s.playbackRate.value = rnd(0.7, 1.4);
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+    const g = ctx.createGain(); g.gain.value = amp;
+    s.connect(f).connect(g).connect(bus); s.start(when);
+  }
+  // a cluster of ticks: fibres giving way one after another
+  function crackleBurst(when, n, loud){
+    let t = when;
+    for (let k = 0; k < n; k++){
+      t += -Math.log(1 - Math.random()) * rnd(0.012, 0.05);
+      tick(t, rnd(0.02, 0.1) * loud * (Math.random() < 0.12 ? 2.2 : 1));
+    }
+  }
+  // a pop: a sharp knock that rings briefly in the wood, then a few trailing ticks
+  function popSound(when, loud = 1){
+    const { ctx, bus, noise } = audio;
+    const s = ctx.createBufferSource(); s.buffer = noise;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(280, 850); bp.Q.value = rnd(5, 11);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 120;
+    const g = ctx.createGain(), dec = rnd(0.05, 0.12);
+    g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(0.9 * loud, when + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dec);
+    s.connect(bp).connect(hp).connect(g).connect(bus); s.start(when, Math.random()); s.stop(when + dec + 0.02);
+    tick(when, 0.35 * loud, 1500);
+    crackleBurst(when + 0.03, 2 + Math.floor(Math.random()*5), 0.9);
+  }
+  // steam escaping from damp wood: a thin, quiet hiss that swells and fades
+  function sizzle(when){
+    const { ctx, bus, noise } = audio;
+    const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(4500, 7500); bp.Q.value = 0.9;
+    const g = ctx.createGain(), d = rnd(0.6, 1.6);
+    g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(rnd(0.012, 0.025), when + d*0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + d);
+    s.connect(bp).connect(g).connect(bus); s.start(when); s.stop(when + d + 0.05);
+  }
+  function pop(){
+    if (!soundOn || !audio) return;
+    popSound(audio.ctx.currentTime + 0.01, rnd(0.7, 1));
+  }
+
+  // ---------- controls: keyboard, and a panel toggled with Cmd/Ctrl + I ----------
+  let baseIntensity = 0.85, stoke = 0;
+  let gust = 0, gustDir = 1;
+  let spritesEnabled = true;
+  const panel = document.getElementById('panel'), toastEl = document.getElementById('toast'), fireInput = document.getElementById('fire');
+  const bSound = document.getElementById('bSound'), bSprites = document.getElementById('bSprites');
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  document.querySelectorAll('kbd.mod').forEach(k => { k.textContent = isMac ? '⌘' : 'Ctrl'; });
+  let toastT;
+  function toast(msg){ toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 1400); }
+  const setPressed = (b, on) => { b.setAttribute('aria-pressed', on); b.textContent = on ? 'On' : 'Off'; };
+
+  async function toggleSound(){
+    try {
+      if (!audio) initAudio();
+      soundOn = !soundOn;
+      if (soundOn) await audio.ctx.resume();
+      audio.master.gain.setTargetAtTime(soundOn ? 0.9 : 0, audio.ctx.currentTime, 0.25);
+    } catch (e) { soundOn = false; }
+    setPressed(bSound, soundOn); toast(soundOn ? 'Sound on' : 'Sound off');
+  }
+  function toggleSprites(){
+    spritesEnabled = !spritesEnabled;
+    if (spritesEnabled && !spritesOut) nextShow = time + 1.5;
+    setPressed(bSprites, spritesEnabled); toast(spritesEnabled ? 'Sprites on' : 'Sprites off');
+  }
+  function doStoke(){ stoke = 1; burst(45); pop(); for (let k = 0; k < 3; k++) dropEmber(); toast('Stoked'); }
+  function doBreeze(){ gust = 1; gustDir = Math.random() < 0.5 ? -1 : 1; toast('Breeze'); }
+  const fireWord = v => v < 0.35 ? 'Embers' : v < 0.65 ? 'Low' : v < 0.95 ? 'Steady' : v < 1.2 ? 'Lively' : 'Roaring';
+  function setIntensity(v, quiet){
+    baseIntensity = Math.max(0.15, Math.min(1.4, v));
+    fireInput.value = Math.round(baseIntensity * 100);
+    if (!quiet) toast('Fire · ' + fireWord(baseIntensity));
+  }
+  function togglePanel(show){
+    panel.hidden = show === undefined ? !panel.hidden : !show;
+    if (!panel.hidden) hideHint();
+  }
+  bSound.onclick = toggleSound; bSprites.onclick = toggleSprites;
+  document.getElementById('bStoke').onclick = doStoke;
+  document.getElementById('bBreeze').onclick = doBreeze;
+  document.getElementById('pClose').onclick = () => togglePanel(false);
+  fireInput.oninput = e => setIntensity(e.target.value / 100, true);
+
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if ((e.metaKey || e.ctrlKey) && k === 'i'){ e.preventDefault(); togglePanel(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.tagName === 'INPUT' && k.startsWith('arrow')) return;
+    if (e.repeat && k !== 'arrowup' && k !== 'arrowdown') return;
+    switch (k){
+      case 'a': toggleSound(); break;
+      case 'p': toggleSprites(); break;
+      case 's': doStoke(); break;
+      case 'b': doBreeze(); break;
+      case 'i': togglePanel(); break;
+      case 'arrowup': e.preventDefault(); setIntensity(baseIntensity + 0.1); break;
+      case 'arrowdown': e.preventDefault(); setIntensity(baseIntensity - 0.1); break;
+      case 'escape': togglePanel(false); break;
+    }
+  });
+  // double-click or double-tap anywhere on the fire also opens the panel
+  canvas.addEventListener('dblclick', () => togglePanel());
+  let lastTap = 0, tapX = 0, tapY = 0;
+  canvas.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'touch') return;
+    const now = performance.now();
+    if (now - lastTap < 320 && Math.hypot(e.clientX - tapX, e.clientY - tapY) < 30){ togglePanel(); lastTap = 0; }
+    else { lastTap = now; tapX = e.clientX; tapY = e.clientY; }
+  });
+  const hintEl = document.getElementById('startHint');
+  if (matchMedia('(pointer: coarse)').matches) hintEl.textContent = 'Double-tap for controls';
+  function hideHint(){ hintEl.classList.add('gone'); }
+  setTimeout(hideHint, 6000);
+
+  const cam = { az: 0, el: 0, r: 2.1, targetAz: 0, targetEl: 0, targetR: 2.1 };
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => { drag = {x:e.clientX, y:e.clientY}; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag) return;
+    cam.targetAz = Math.max(-0.4, Math.min(0.4, cam.targetAz - (e.clientX - drag.x) * 0.003));
+    cam.targetEl = Math.max(-0.12, Math.min(0.45, cam.targetEl + (e.clientY - drag.y) * 0.002));
+    drag = {x:e.clientX, y:e.clientY};
+  });
+  const endDrag = () => { drag = null; };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); cam.targetR = Math.max(0.9, Math.min(3.0, cam.targetR * (1 + e.deltaY*0.001))); }, {passive:false});
+
+  // controls fade away while you watch
+  let idleTimer;   // hide the cursor while you watch
+  const wake = () => { document.body.classList.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(() => document.body.classList.add('idle'), 3000); };
+  ['pointermove', 'pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, wake, {passive:true}));
+  document.addEventListener('focusin', wake);
+  wake();
+
+  function resize(){
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w / h < 0.8 ? 62 : 42;
+    camera.updateProjectionMatrix();
+    spU.uPR.value = renderer.getPixelRatio();
+    const pr = renderer.getPixelRatio();
+    depthRT.setSize(Math.round(w*pr), Math.round(h*pr)); DEPTH.uRes.value.set(Math.round(w*pr), Math.round(h*pr));
+  }
+  addEventListener('resize', resize); resize();
+
+  const n1 = (x) => { const i = Math.floor(x), f = x - i, u = f*f*(3-2*f);
+    const h = k => { const s = Math.sin(k*127.1)*43758.5453; return s - Math.floor(s); };
+    return h(i)*(1-u) + h(i+1)*u; };
+
+  const target = new THREE.Vector3(0, 0.5, -0.08);
+  const clock = new THREE.Clock();
+  let time = 0, spAcc = 0;
+  function frame(){
+    const dt = Math.min(clock.getDelta(), 0.05);
+    time += dt;
+
+    stoke = Math.max(0, stoke - dt * 0.22);
+    const draft = 0.92 + 0.16 * n1(time * 0.35);          // slow breathing of the chimney draft
+    const I = (baseIntensity + stoke * 0.55) * draft;
+    const flick = 0.85 + 0.12*n1(time*6.3) + 0.06*n1(time*17.7);
+    G.time.value = time; G.intensity.value = I; G.flick.value = flick;
+    gust = Math.max(0, gust - dt * 0.45);
+    S.time.value = time;
+    S.fuel.value = 0.45 + 0.8 * I;
+    S.buoy.value = 150 + 70 * I;
+    S.gust.value = gustDir * gust * gust * 1.4;
+    S.kick.value = stoke * stoke;
+    stepFires(Math.min(dt, 1/30));
+
+    fireLights.forEach(f => {
+      const k = 0.75 + 0.3*n1(time*5.1 + f.seed) + 0.1*n1(time*13.0 + f.seed);
+      f.l.intensity = f.base * k * (0.35 + 0.75*I);
+      f.l.position.set(f.p[0] + (n1(time*2 + f.seed) - 0.5)*0.05, f.p[1] + (n1(time*2.7 + f.seed) - 0.5)*0.04, f.p[2]);
+    });
+    coalMats.forEach((m, i) => { m.emissiveIntensity = (0.25 + 0.6*n1(time*(0.5 + i*0.2) + i*9)) * (0.4 + 0.7*I); });
+    bloom.material.opacity = (0.45 + 0.35*I) * flick;
+    bloom.scale.set(1.1 + 0.4*I, 0.9 + 0.45*I, 1);
+
+    // sparks
+    spAcc += dt * (1.2 + 7 * Math.max(0, I - 0.3));
+    while (spAcc > 1){ spAcc -= 1; emitSpark(); }
+    for (let i = 0; i < SP; i++){
+      if (spAge[i] > spDur[i]){ spLife[i] = 1; continue; }
+      spAge[i] += dt;
+      const v = spVel[i];
+      v.x += Math.sin(time*6 + spSeed[i]) * 0.5 * dt;
+      v.y *= 1 - 0.25*dt;
+      spPos[i*3] += v.x*dt; spPos[i*3+1] += v.y*dt; spPos[i*3+2] += v.z*dt;
+      spLife[i] = Math.min(1, spAge[i] / spDur[i]);
+      if (spPos[i*3+1] > OT + 0.05 || spPos[i*3+1] < OB) spLife[i] = 1;
+    }
+    spGeo.attributes.position.needsUpdate = true; spGeo.attributes.life.needsUpdate = true; spGeo.attributes.size.needsUpdate = true;
+
+    // sound
+    if (soundOn && audio){
+      const { ctx } = audio;
+      const t0 = ctx.currentTime + 0.02;
+      audio.bedGain.gain.setTargetAtTime((0.025 + 0.04*I) * (0.8 + 0.4*n1(time*0.7)), ctx.currentTime, 0.4);
+      audio.bedLP.frequency.setTargetAtTime(120 + 90*I, ctx.currentTime, 0.5);
+      if (Math.random() < dt * (2 + 5*I)) tick(t0, rnd(0.01, 0.045));                            // lone ticks
+      if (Math.random() < dt * (0.5 + 1.8*I + 3*stoke)) crackleBurst(t0, 2 + Math.floor(Math.pow(Math.random(), 2) * 14), 0.6 + 0.6*I);
+      if (Math.random() < dt * (0.05 + 0.1*I)){ popSound(t0, rnd(0.6, 1)); burst(12); }       // a pop, every ten seconds or so
+      if (Math.random() < dt * 0.025) sizzle(t0);
+    } else if (Math.random() < dt * 0.12 * I){ burst(10); }
+
+    // camera: a slow, near-still gaze with gentle breathing
+    cam.az += (cam.targetAz - cam.az) * Math.min(1, dt*2.5);
+    cam.el += (cam.targetEl - cam.el) * Math.min(1, dt*2.5);
+    cam.r += (cam.targetR - cam.r) * Math.min(1, dt*2.5);
+    const breathe = reduceMotion ? 0 : 1;
+    const az = cam.az + Math.sin(time*0.07) * 0.05 * breathe;
+    const el = 0.02 + cam.el + Math.sin(time*0.05 + 1) * 0.015 * breathe;
+    camera.position.set(target.x + Math.sin(az)*Math.cos(el)*cam.r, target.y + Math.sin(el)*cam.r, target.z + Math.cos(az)*Math.cos(el)*cam.r);
+    camera.lookAt(target);
+
+    // flames turn to face the viewer
+    fires.forEach(f => { f.mesh.rotation.y = Math.atan2(camera.position.x - f.mesh.position.x, camera.position.z - f.mesh.position.z) * 0.5; });
+
+    updateSprites(dt);
+    updateEmbers(dt, I);
+
+    // depth-only pass of the solid scene, so the flames can fade softly where they meet wood and brick
+    renderer.shadowMap.needsUpdate = true;
+    camera.layers.set(0);
+    renderer.setRenderTarget(depthRT); renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    camera.layers.enableAll();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  // let the fire establish itself before the first frame is shown
+  for (let i = 0; i < 180; i++){ S.time.value = i/60; stepFires(1/60); }
+  frame();
+})();
+</script>
+</body>
+</html>
